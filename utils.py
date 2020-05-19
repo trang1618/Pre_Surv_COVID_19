@@ -11,9 +11,13 @@ from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, classifi
 
 
 # 常用参数
-top3_feats_cols = ['乳酸脱氢酶', '超敏C反应蛋白', '淋巴细胞(%)']
-in_out_time_cols = ['入院时间', '出院时间']
+# top3_feats_cols = ['Lactate dehydrogenase', '超敏C反应蛋白', '淋巴细胞(%)']
+# in_out_time_cols = ['入院时间', 'Discharge time']
 
+in_out_time_cols = ['Admission time', 'Discharge time']
+top3_feats_cols = ['Lactate dehydrogenase',
+    'High sensitivity C-reactive protein',
+    '(%)lymphocyte']
 
 def is_number(s):
     if s is None:
@@ -88,9 +92,9 @@ def merge_data_by_sliding_window(data, n_days=1, dropna=True, subset=None, time_
     """
     #根据PATIENT_ID排序
     data = data.reset_index(level=1)
-    # dt.normalize() 取出院时间的天数
-    # 距离出院时长        Note: 去掉了出院时间和检测时间的时分秒，因为我觉得以 00:00:00 为分界点更合适
-    t_diff = data['出院时间'].dt.normalize() - data['RE_DATE'].dt.normalize()
+    # dt.normalize() 取Discharge time的天数
+    # 距离出院时长        Note: 去掉了Discharge time和检测时间的时分秒，因为我觉得以 00:00:00 为分界点更合适
+    t_diff = data['Discharge time'].dt.normalize() - data['RE_DATE'].dt.normalize()
     # 滑窗取整的依据。即nn_days天内的会取整成为同一个数值，后面通过groupby方法分组
     data['t_diff'] = t_diff.dt.days.values // n_days * n_days
     #
@@ -124,14 +128,14 @@ def merge_data_by_sliding_window(data, n_days=1, dropna=True, subset=None, time_
 
 def score_form(x: np.array):
     """打分表预测
-    example: pred, score = score_form(df[['乳酸脱氢酶', '淋巴细胞(%)', '超敏C反应蛋白']].values)
+    example: pred, score = score_form(df[['Lactate dehydrogenase', '淋巴细胞(%)', '超敏C反应蛋白']].values)
 
-    :param x: 列顺序：['乳酸脱氢酶', '淋巴细胞(%)', '超敏C反应蛋白']
+    :param x: 列顺序：['Lactate dehydrogenase', '淋巴细胞(%)', '超敏C反应蛋白']
     :return: 预测类别及最后得分
     """
     x = x.copy()
 
-    # 乳酸脱氢酶
+    # Lactate dehydrogenase
     x[:, 0] = pd.cut(
         x[:, 0],
         [-2, 107, 159, 210, 262, 313, 365, 416, 467, 519, 570, 622, 673, 724, 776, 827, 1e5],
@@ -164,16 +168,16 @@ def decision_tree(x: pd.Series):
     """正文中的决策树
     example: df.apply(decision_tree, axis=1)
 
-    :param x: 单个样本，['乳酸脱氢酶', '超敏C反应蛋白', '淋巴细胞(%)']
+    :param x: 单个样本，['Lactate dehydrogenase', '超敏C反应蛋白', '淋巴细胞(%)']
     :return: 0: 治愈, 1: 死亡
     """
-    if x['乳酸脱氢酶'] >= 365:
+    if x['Lactate dehydrogenase'] >= 365:
         return 1
 
-    if x['超敏C反应蛋白'] < 41.2:
+    if x['High sensitivity C-reactive protein'] < 41.2:
         return 0
 
-    if x['淋巴细胞(%)'] > 14.7:
+    if x['(%)lymphocyte'] > 14.7:
         return 0
     else:
         return 1
@@ -188,7 +192,7 @@ def get_time_in_advance_of_predict(data):
     # 由于python的机制，用copy新建一个data，不然会修改原dat
     data = data.copy()
     # 在data 这个dataframe中新建一列right，数值是判定是否正确
-    data['right'] = data['pred'] == data['出院方式']
+    data['right'] = data['pred'] == data['outcome']
     # 新建一个空列表，用于存储提前预测的正确的天数
     time_advance = []
     # data.index.remove_unused_levels().levels[0]表示的是病人id的list，即遍历所有病人
@@ -199,7 +203,7 @@ def get_time_in_advance_of_predict(data):
         if len(d) == 1:
             if d.iloc[0]['right']:
                 # 将预测对存入time_advance，分别为病人的id，正确的天数，出院的方式
-                time_advance.append([id_, d.iloc[0].name, d['出院方式'].iat[0]])
+                time_advance.append([id_, d.iloc[0].name, d['outcome'].iat[0]])
             continue
 
         # 多数据 Step1: 预测错
@@ -209,7 +213,7 @@ def get_time_in_advance_of_predict(data):
         # 多数据 Step2: 全对
         if d['right'].all():
             # 将预测对存入time_advance，分别为病人的id，正确的天数，出院的方式
-            time_advance.append([id_, d.iloc[-1].name, d['出院方式'].iat[0]])
+            time_advance.append([id_, d.iloc[-1].name, d['outcome'].iat[0]])
             continue
 
         # 多数据 Step3: 部分对
@@ -218,7 +222,7 @@ def get_time_in_advance_of_predict(data):
                 continue
             else:
                 # 将预测对存入time_advance，分别为病人的id，正确的天数，出院的方式
-                time_advance.append([id_, d.iloc[i-1].name, d['出院方式'].iat[0]])
+                time_advance.append([id_, d.iloc[i-1].name, d['outcome'].iat[0]])
                 break
 
     # 将time_advance存成DataFrame
