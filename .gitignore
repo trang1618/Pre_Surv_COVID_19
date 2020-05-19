@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.ipynb_checkpoints/
+Pre_Surv_COVID_19.Rproj
+
+__pycache__
+data/time_series*
